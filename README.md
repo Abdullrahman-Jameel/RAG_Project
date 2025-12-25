@@ -1,6 +1,22 @@
 # RAG Microservice with FastAPI, LangChain, and Supabase
 
-This project is a complete Retrieval-Augmented Generation (RAG) microservice built with a modern Python stack. It allows you to upload documents (.pdf or .txt) and ask questions about their content. The backend is a streaming-first FastAPI application, and it uses Supabase for a scalable vector store and LangChain for orchestrating the RAG pipeline.
+Unlock the power of your documents with this **Retrieval-Augmented Generation (RAG) Microservice**. Built with a cutting-edge Python stack, this project allows you to seamlessly upload PDF and text files, then query their content using natural language. Experience intelligent, context-aware answers delivered through a streaming-first FastAPI backend, powered by a scalable Supabase vector store and orchestrated by LangChain.
+
+## 💡 How It Works
+
+At its core, this RAG microservice integrates several powerful components:
+
+1.  **Document Ingestion:** When you upload a document (PDF or TXT), it's automatically processed.
+    *   **Loading:** LangChain document loaders extract text from the file.
+    *   **Chunking:** The text is split into smaller, manageable "chunks" to optimize retrieval.
+    *   **Embedding:** Each chunk is converted into a numerical vector (embedding) using OpenAI's `text-embedding-3-small` model.
+    *   **Storage:** These embeddings, along with their original text content and metadata, are stored in a Supabase Postgres database with the `pgvector` extension.
+
+2.  **Question Answering (RAG):** When you ask a question:
+    *   **Query Embedding:** Your question is also converted into a numerical vector.
+    *   **Retrieval:** The system searches the Supabase vector store to find the most semantically similar document chunks to your question.
+    *   **Augmentation:** These retrieved chunks provide context to the Large Language Model (LLM).
+    *   **Generation:** OpenAI's `gpt-3.5-turbo` LLM then uses this context to generate a concise and relevant answer, streamed back to you in real-time.
 
 ## Features
 
@@ -11,7 +27,6 @@ This project is a complete Retrieval-Augmented Generation (RAG) microservice bui
 -   **Supabase Vector Store:** Uses Supabase's Postgres database with the `pgvector` extension for a scalable and managed vector store.
 -   **Streaming Responses:** Answers to your questions are streamed back token-by-token for a real-time experience.
 -   **Simple Frontend:** A basic HTML frontend is provided to interact with the backend.
--   **Easy to Run:** The project can be run locally with just a few commands.
 
 ## Tech Stack
 
@@ -34,7 +49,7 @@ Before you begin, you will need:
 
 ### Installation
 
-1.  **Clone the repository:**
+1.  **Clone the Repository:**
     ```bash
     git clone https://github.com/Abdullrahman-Jameel/RAG_Project.git
     cd RAG_Project
@@ -43,11 +58,16 @@ Before you begin, you will need:
 2.  **Create a virtual environment and install dependencies:**
     ```bash
     python -m venv .venv
-    source .venv/bin/activate  # On Windows, use `.venv\Scripts\activate`
+    # Activate the virtual environment:
+    # On macOS/Linux: source .venv/bin/activate
+    # On Windows: .venv\Scripts\activate
+    ```
+    Then install the dependencies:
+    ```bash
     pip install -r requirements.txt
     ```
 
-3.  **Set up your environment variables:**
+3.  **Configure Environment Variables:**
     Create a file named `.env` in the root of the project and add your Supabase and OpenAI credentials:
     ```
     OPENAI_API_KEY="your_openai_api_key"
@@ -56,7 +76,7 @@ Before you begin, you will need:
     ```
 
 4.  **Set up the Supabase database:**
-    In your Supabase project's SQL Editor, run the following SQL script to create the `documents` table and the `match_documents` function. This is a one-time setup.
+    Navigate to your Supabase project's SQL Editor and execute the following script. This initializes the `documents` table and the `match_documents` function, essential for vector storage and retrieval. This is a one-time setup.
 
     ```sql
     -- Enable the pgvector extension
@@ -96,7 +116,7 @@ Before you begin, you will need:
     $$;
     ```
 
-### Running the Application
+## 🚀 Running the Application
 
 Once you have completed the installation and setup, you can run the application with:
 ```bash
@@ -104,9 +124,9 @@ uvicorn backend:app --reload
 ```
 The application will be available at `http://localhost:8000`.
 
-## API Endpoints
+## 🌐 API Endpoints
 
-The following are the main API endpoints:
+Here's an overview of the primary API endpoints available in this microservice:
 
 -   `GET /`: Serves the main HTML page.
 -   `POST /upload`: Upload a document.
@@ -116,9 +136,11 @@ The following are the main API endpoints:
 -   `DELETE /clear`: Deletes all documents from the database.
 -   `GET /health`: Health check endpoint.
 
-You can interact with these endpoints using the provided HTML page or a tool like `curl` or Postman.
+You can interact with these endpoints via the provided `static/page1.html` frontend, or directly using tools like `curl`, Postman, or Insomnia.
 
-## Project Structure
+## 📁 Project Structure
+
+A quick overview of the project's layout:
 
 ```
 .
@@ -131,3 +153,11 @@ You can interact with these endpoints using the provided HTML page or a tool lik
 ├── .env                  # Environment variables (you need to create this)
 └── README.md             # This file
 ```
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to open issues or submit pull requests.
+
+## 📝 License
+
+This project is licensed under the MIT License.
