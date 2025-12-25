@@ -1,0 +1,244 @@
+# Project Progress and Changelog
+
+This file documents the major changes made to the project, explaining the reasoning behind them, just like a good version control commit message would.
+
+---
+## Change 1: Robust Configuration and API Key Handling
+
+**Date:** 2025-12-04
+
+### Why was this change made?
+
+In professional applications, it's crucial that the service fails quickly and clearly if it's not configured correctly. The previous implementation would have failed with a cryptic error later on if an environment variable like `SUPABASE_URL` was missing.
+
+This change adds "fail-fast" validation. It checks for all required environment variables (`SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `OPENAI_API_KEY`) right at startup. If any are missing, it stops the application immediately with a clear, human-readable error message stating exactly what is wrong.
+
+Additionally, explicitly passing the `openai_api_key` to the OpenAI clients is better practice than relying on the library to implicitly find it in the environment. It makes the code more readable and less dependent on "magic" behavior.
+
+### Old Code (`rag_supabase.py`):
+
+```python
+class SupabaseRAG:
+    def __init__(self):
+        print("🚀 Initializing SupabaseRAG...")
+        
+        # Initialize Supabase
+        supabase_url = os.getenv("SUPABASE_URL")
+        supabase_key = os.getenv("SUPABASE_SERVICE_KEY")
+        
+        print(f"📡 Connecting to Supabase: {supabase_url}")
+        
+        self.supabase: Client = create_client(supabase_url, supabase_key)
+        
+        # Initialize embeddings
+        self.embeddings = OpenAIEmbeddings(
+            model="text-embedding-3-small"
+        )
+        
+        # Initialize LLM with streaming
+        self.llm = ChatOpenAI(
+            model="gpt-3.5-turbo",
+            temperature=0,
+            streaming=True
+        )
+        
+        print("✅ SupabaseRAG initialized")
+```
+
+### New Code (`rag_supabase.py`):
+
+```python
+class SupabaseRAG:
+    def __init__(self):
+        print("🚀 Initializing SupabaseRAG...")
+        
+        # --- Configuration Validation ---
+        self.supabase_url = os.getenv("SUPABASE_URL")
+        self.supabase_key = os.getenv("SUPABASE_SERVICE_KEY")
+        self.openai_api_key = os.getenv("OPENAI_API_KEY")
+
+        if not self.supabase_url:
+            raise ValueError("SUPABASE_URL environment variable not set.")
+        if not self.supabase_key:
+            raise ValueError("SUPABASE_SERVICE_KEY environment variable not set.")
+        if not self.openai_api_key:
+            raise ValueError("OPENAI_API_KEY environment variable not set.")
+        
+        print(f"📡 Connecting to Supabase: {self.supabase_url}")
+        
+        # --- Client Initialization ---
+        self.supabase: Client = create_client(self.supabase_url, self.supabase_key)
+        
+        # Initialize embeddings
+        self.embeddings = OpenAIEmbeddings(
+            openai_api_key=self.openai_api_key,
+            model="text-embedding-3-small"
+        )
+        
+        # Initialize LLM with streaming
+        self.llm = ChatOpenAI(
+            openai_api_key=self.openai_api_key,
+            model="gpt-3.5-turbo",
+            temperature=0,
+            streaming=True
+        )
+        
+        print("✅ SupabaseRAG initialized")
+```
+
+---
+## Change 2: Restrict CORS Policy
+
+**Date:** 2025-12-04
+
+### Why was this change made?
+
+Leaving `allow_origins=["*"]` is a security vulnerability in production environments as it allows any domain to make requests to your API, potentially exposing your service to cross-site scripting (XSS) attacks or other malicious activity.
+
+By explicitly setting `allow_origins=["http://localhost:8000"]`, we restrict API access to only the expected frontend origin. Even for local development where the frontend might be served from the same origin, it's a good practice to be explicit. This sets a secure default and teaches good habits for when the frontend is deployed to a separate domain.
+
+### Old Code (`backend.py`):
+
+```python
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+```
+
+### New Code (`backend.py`):
+
+```python
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:8000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+```
+
+---
+## Change 3: Specific Error Handling for File Uploads
+
+**Date:** 2025-12-04
+
+### Why was this change made?
+
+Generic error handling (like a broad `except Exception`) can hide the true nature of a problem and make debugging difficult. For an API, providing specific error codes and messages helps frontend developers understand what went wrong and how to handle it gracefully.
+
+In the `upload_document` endpoint, a `ValueError` is raised by `rag_supabase.py` for unsupported file types. Instead of returning a generic `500 Internal Server Error`, we now specifically catch `ValueError` and return a `400 Bad Request` with a clear message. This immediately tells the client that the input (file type) was incorrect, rather than implying a server-side issue. The generic `Exception` catch remains as a fallback for any other unexpected server errors.
+
+### Old Code (`backend.py` - excerpt from `upload_document`):
+
+```python
+        # Process and store in database
+        num_chunks = rag.load_and_process_document(file_path)
+        
+        return {
+            "success": True,
+            "message": f"Processed {num_chunks} chunks from {file.filename}",
+            "filename": file.filename
+        }
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+```
+
+### New Code (`backend.py` - excerpt from `upload_document`):
+
+```python
+        # Process and store in database
+        num_chunks = rag.load_and_process_document(file_path)
+        
+        return {
+            "success": True,
+            "message": f"Processed {num_chunks} chunks from {file.filename}",
+            "filename": file.filename
+        }
+    
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid file type: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to upload document: {e}")
+```
+
+---
+## Change 4: Batch Inserts for Supabase Performance
+
+**Date:** 2025-12-04
+
+### Why was this change made?
+
+The previous implementation of `_store_chunks` processed and inserted each document chunk into Supabase individually. For documents with many chunks, this resulted in a large number of individual network requests to the database, which is highly inefficient and slow.
+
+By implementing batch inserts, we collect all the prepared chunk data (content, metadata, and embeddings) into a list and send them to Supabase in a single API call. This drastically reduces network overhead and improves the overall performance of document processing and storage, especially for larger documents.
+
+### Old Code (`rag_supabase.py` - excerpt from `_store_chunks`):
+
+```python
+    def _store_chunks(self, chunks, source_file):
+        """Store document chunks with embeddings in Supabase"""
+        for i, chunk in enumerate(chunks):
+            print(f"🔄 Processing chunk {i+1}/{len(chunks)}...")
+            
+            # Generate embedding
+            embedding = self.embeddings.embed_query(chunk.page_content)
+            print(f"✅ Generated embedding (dimension: {len(embedding)})")
+            
+            # Prepare metadata
+            metadata = {
+                "source": source_file,
+                "chunk_index": i,
+                "page": chunk.metadata.get("page", 0)
+            }
+            
+            # Insert into Supabase
+            try:
+                result = self.supabase.table('documents').insert({
+                    "content": chunk.page_content,
+                    "metadata": json.dumps(metadata),
+                    "embedding": embedding
+                }).execute()
+                print(f"✅ Stored chunk {i+1}/{len(chunks)} in database")
+            except Exception as e:
+                print(f"❌ Error storing chunk {i+1}: {e}")
+                raise
+```
+
+### New Code (`rag_supabase.py` - excerpt from `_store_chunks`):
+
+```python
+    def _store_chunks(self, chunks, source_file):
+        """Store document chunks with embeddings in Supabase using batch insertion"""
+        print(f"🔄 Preparing {len(chunks)} chunks for batch insertion...")
+        
+        insert_data = []
+        for i, chunk in enumerate(chunks):
+            # Generate embedding
+            embedding = self.embeddings.embed_query(chunk.page_content)
+            
+            # Prepare metadata
+            metadata = {
+                "source": source_file,
+                "chunk_index": i,
+                "page": chunk.metadata.get("page", 0)
+            }
+            
+            insert_data.append({
+                "content": chunk.page_content,
+                "metadata": json.dumps(metadata),
+                "embedding": embedding
+            })
+        
+        # Perform batch insert
+        try:
+            result = self.supabase.table('documents').insert(insert_data).execute()
+            print(f"✅ Successfully batch inserted {len(insert_data)} chunks into database.")
+        except Exception as e:
+            print(f"❌ Error during batch insertion: {e}")
+            raise
+```

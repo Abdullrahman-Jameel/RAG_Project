@@ -1,0 +1,8 @@
+LangChain is a framework for developing applications powered by language models.
+It enables applications that are context-aware and can reason about information.    
+
+RAG (Retrieval Augmented Generation) combines information retrieval with text generation.
+It retrieves relevant documents and uses them as context for generating accurate answers.
+
+Vector databases store embeddings, which are numerical representations of text.
+FAISS is a popular vector database for similarity search.
